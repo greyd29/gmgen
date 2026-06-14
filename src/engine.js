@@ -301,6 +301,7 @@ const ATOMS = {
   spawnNextFaller: {
     id:'spawn_next_faller', on:'event', match:'spawn_next_faller',
     apply: (w,ev,ctx) => {
+      if (w.lookahead) return;
       const shapes = [
         [[0,0]],
         [[0,0],[1,0]],
