@@ -21,3 +21,15 @@ for (let t = 0; t < 100; t++) {
   }
 }
 console.log('lineclear_test passed');
+
+const blocked = makeWorld(4, 4);
+const blockedRules = buildRules(['lineClear']);
+for (let x = 0; x < blocked.W; x++) {
+  addEntity(blocked, {x, y: 2, cells: [[0,0]], tags: TAG.PICKUP});
+}
+step(blocked, blockedRules, 'wait');
+assertWorldValid(blocked, 'non-faller full row');
+if (blocked.score[0] !== 0) {
+  throw new Error(`non-faller full row should not score, got ${blocked.score[0]}`);
+}
+console.log('lineclear non-faller full row test passed');

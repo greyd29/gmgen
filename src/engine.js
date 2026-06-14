@@ -124,13 +124,14 @@ const ATOMS = {
     apply: (w,_,ctx) => {
       for (let y=0;y<w.H;y++){
         let full=true;
-        for (let x=0;x<w.W;x++) if (w.grid[y*w.W+x]===-1){ full=false; break; }
+        for (let x=0;x<w.W;x++){
+          const id = w.grid[y*w.W+x];
+          if (id===-1 || !(w.tags[id]&TAG.FALLER)){ full=false; break; }
+        }
         if (!full) continue;
         // clear every FALLER cell in this row; shift the FALLER stack above down
         for (let x=0;x<w.W;x++){
           const id=w.grid[y*w.W+x];
-          if (id===-1) continue;
-          if (!(w.tags[id]&TAG.FALLER)) continue;
           // remove just this cell from the entity's shape
           w.cells[id] = w.cells[id].filter(([dx,dy]) => w.y[id]+dy !== y);
           w.grid[y*w.W+x] = -1;
