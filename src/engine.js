@@ -15,6 +15,7 @@ function makeWorld(W, H){
     score: [0,0],                            // per-side score (side 0/1)
     side: [],                                // -1 = neutral
     tick: 0, log: [], over: false, winner: null,
+    lookahead: false,                        // true in cloneWorld() — spawners skip when set
   };
 }
 
@@ -70,7 +71,7 @@ function decomposeLockedFaller(w, id){
 // deep clone for AI lookahead -- flat arrays make this cheap
 function cloneWorld(w){
   return {
-    W:w.W, H:w.H, grid:w.grid.slice(),
+    W:w.W, H:w.H, grid:w.grid.slice(), lookahead:true,
     alive:w.alive.slice(), x:w.x.slice(), y:w.y.slice(),
     cells:w.cells.map(c=>c.map(p=>p.slice())),
     vx:w.vx.slice(), vy:w.vy.slice(), tickRate:w.tickRate.slice(), tickCtr:w.tickCtr.slice(), locked:w.locked.slice(),
@@ -320,7 +321,7 @@ const ATOMS = {
   },
   pickupSpawner: {
     id:'pickup_spawner', on:'tick', global:true,
-    filter: (w,_) => w.tick % 20 === 0,
+    filter: (w,_) => !w.lookahead && w.tick % 20 === 0,
     apply: (w,_,ctx) => {
       const count = w.alive.reduce((sum,id) => sum + ((w.alive[id] && (w.tags[id]&TAG.PICKUP)) ? 1 : 0), 0);
       if (count > 3) return;
@@ -332,7 +333,7 @@ const ATOMS = {
   },
   hazardSpawner: {
     id:'hazard_spawner', on:'tick', global:true,
-    filter: (w,_) => w.tick % 30 === 0,
+    filter: (w,_) => !w.lookahead && w.tick % 30 === 0,
     apply: (w,_,ctx) => {
       const count = w.alive.reduce((sum,id) => sum + ((w.alive[id] && (w.tags[id]&TAG.HAZARD)) ? 1 : 0), 0);
       if (count > 1) return;
@@ -344,7 +345,7 @@ const ATOMS = {
   },
   respawnPlayer: {
     id:'respawn_player', on:'tick', global:true,
-    filter: ()=>true,
+    filter: (w)=>!w.lookahead,
     apply: (w,_,ctx) => {
       const aliveSides = [false,false];
       for (let id = 0; id < w.alive.length; id++){
@@ -451,7 +452,7 @@ const ATOMS = {
   // ENEMY_SPAWNER: periodically spawns ENEMY entities (up to 2 at a time).
   enemySpawner: {
     id:'enemy_spawner', on:'tick', global:true,
-    filter: (w,_) => w.tick % 25 === 0,
+    filter: (w,_) => !w.lookahead && w.tick % 25 === 0,
     apply: (w,_,ctx) => {
       const count = w.alive.reduce((s,v,i)=>s+((v&&(w.tags[i]&TAG.ENEMY))?1:0),0);
       if (count >= 2 || w.alive.length >= 400) return;

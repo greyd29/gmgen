@@ -84,8 +84,8 @@ if (require.main === module){
   let total=0, wins=0, ticksSum=0;
   const t0=Date.now();
   for (let i=0;i<6;i++){
-    const agents = i%2===0 ? [(w,rl,s)=>lookaheadAgent(w,rl,s,2), randomAgent]
-                            : [randomAgent, (w,rl,s)=>lookaheadAgent(w,rl,s,2)];
+    const agents = i%2===0 ? [(w,rl,s)=>lookaheadAgent(w,rl,s,1), randomAgent]
+                            : [randomAgent, (w,rl,s)=>lookaheadAgent(w,rl,s,1)];
     const res = runMatch(COMBO, 100, agents);
     const smartSide = i%2===0 ? 0 : 1;
     total++; ticksSum+=res.ended;
