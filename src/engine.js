@@ -50,6 +50,7 @@ function unpaintEntity(w, id){
 function killEntity(w, id){
   unpaintEntity(w, id);
   w.alive[id] = 0;
+  w.cells[id] = null;   // release cells array so cloneWorld skips dead slots
 }
 
 function decomposeLockedFaller(w, id){
@@ -73,7 +74,7 @@ function cloneWorld(w){
   return {
     W:w.W, H:w.H, grid:w.grid.slice(), lookahead:true,
     alive:w.alive.slice(), x:w.x.slice(), y:w.y.slice(),
-    cells:w.cells.map(c=>c.map(p=>p.slice())),
+    cells:w.cells.map(c=>c?c.map(p=>p.slice()):null),
     vx:w.vx.slice(), vy:w.vy.slice(), tickRate:w.tickRate.slice(), tickCtr:w.tickCtr.slice(), locked:w.locked.slice(),
     hp:w.hp.slice(), tags:w.tags.slice(), side:w.side.slice(),
     score:w.score.slice(), tick:w.tick, log:[], over:w.over, winner:w.winner,
