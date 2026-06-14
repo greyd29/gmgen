@@ -1,0 +1,11 @@
+{
+  "name": "gamefactory-ecs",
+  "version": "0.1.0",
+  "description": "ECS prototype for generating and judging 2D games via atomic rule combination",
+  "main": "src/engine.js",
+  "type": "commonjs",
+  "scripts": {
+    "demo": "node tests/demo.js"
+  },
+  "engines": { "node": ">=18" }
+}

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Game Factory — ECS Viewer</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0a0a1a;
+  color: #c8d0ff;
+  font-family: 'Courier New', monospace;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  gap: 14px;
+}
+h1 {
+  font-size: 0.95em;
+  letter-spacing: 0.2em;
+  color: #6688cc;
+  text-transform: uppercase;
+}
+#layout { display: flex; gap: 18px; align-items: flex-start; }
+
+/* canvas */
+#canvas-wrap { position: relative; }
+canvas { display: block; border: 1px solid #1e1e3e; }
+#ov {
+  display: none;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  background: rgba(8,8,22,0.92);
+  border: 1px solid #4455aa;
+  padding: 18px 28px;
+  text-align: center;
+  font-size: 1em;
+  line-height: 1.7;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.s0 { color: #00d4aa; }
+.s1 { color: #ff4466; }
+
+/* side panel */
+#panel { width: 190px; display: flex; flex-direction: column; gap: 10px; }
+.card {
+  background: #10102a;
+  border: 1px solid #1e1e3e;
+  padding: 10px 12px;
+  border-radius: 3px;
+}
+.card h2 {
+  font-size: 0.65em;
+  letter-spacing: 0.12em;
+  color: #445588;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.score-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 2em;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+.score-sep { font-size: 0.5em; color: #333355; }
+.stat { font-size: 0.8em; margin: 3px 0; display: flex; justify-content: space-between; }
+.stat span { color: #e0e8ff; }
+#log { font-size: 0.7em; color: #8899bb; max-height: 100px; overflow-y: auto; }
+#log div { border-bottom: 1px solid #14142e; padding: 2px 0; }
+
+/* legend */
+.leg { display: flex; align-items: center; gap: 7px; font-size: 0.73em; margin: 3px 0; }
+.sw { width: 11px; height: 11px; border-radius: 2px; flex-shrink: 0; }
+
+/* controls */
+#controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.8em;
+}
+button {
+  background: #181830;
+  color: #c8d0ff;
+  border: 1px solid #333366;
+  padding: 5px 12px;
+  font-family: monospace;
+  font-size: 0.85em;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s;
+}
+button:hover { background: #20204a; }
+button.active { background: #1a2d6a; border-color: #6688cc; }
+select {
+  background: #181830;
+  color: #c8d0ff;
+  border: 1px solid #333366;
+  padding: 5px 7px;
+  font-family: monospace;
+  font-size: 0.85em;
+  border-radius: 3px;
+}
+label { color: #8899bb; }
+</style>
+</head>
+<body>
+
+<h1>Game Factory — ECS Viewer</h1>
+
+<div id="layout">
+  <div>
+    <div id="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div id="ov"></div>
+    </div>
+    <div id="controls" style="margin-top:10px;">
+      <button id="btn-play">&#9654; Play</button>
+      <button id="btn-restart">&#8635; Restart</button>
+      <label>Speed
+        <select id="speed">
+          <option value="600">Slow</option>
+          <option value="160" selected>Normal</option>
+          <option value="40">Fast</option>
+        </select>
+      </label>
+      <label>P0
+        <select id="p0">
+          <option value="lookahead">Lookahead</option>
+          <option value="random">Random</option>
+        </select>
+      </label>
+      <label>P1
+        <select id="p1">
+          <option value="random" selected>Random</option>
+          <option value="lookahead">Lookahead</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div id="panel">
+    <div class="card">
+      <h2>Score</h2>
+      <div class="score-row">
+        <span class="s0" id="s0">0</span>
+        <span class="score-sep">—</span>
+        <span class="s1" id="s1">0</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Stats</h2>
+      <div class="stat">Tick <span id="tick">0</span></div>
+      <div class="stat">P0 HP <span class="s0" id="hp0">5</span></div>
+      <div class="stat">P1 HP <span class="s1" id="hp1">5</span></div>
+      <div class="stat">Entities <span id="ents">0</span></div>
+    </div>
+    <div class="card">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
+    <div class="card">
+      <h2>Legend</h2>
+      <div class="leg"><div class="sw" style="background:#00d4aa"></div>Player 0 (bottom)</div>
+      <div class="leg"><div class="sw" style="background:#ff4466"></div>Player 1 (top)</div>
+      <div class="leg"><div class="sw" style="background:#5577ff"></div>Faller</div>
+      <div class="leg"><div class="sw" style="background:#ffee44"></div>Projectile</div>
+      <div class="leg"><div class="sw" style="background:#ffaa00"></div>Pickup</div>
+      <div class="leg"><div class="sw" style="background:#ff6622"></div>Hazard</div>
+      <div class="leg"><div class="sw" style="background:#aa44ff"></div>Enemy</div>
+    </div>
+  </div>
+</div>
+
+<!-- Browser shim: let engine.js populate module.exports -->
+<script> window.module = { exports: {} }; window.require = () => ({}); </script>
+<script src="../src/engine.js"></script>
+<script>
+'use strict';
+const {
+  TAG, makeWorld, addEntity, cellsOf, buildRules, step,
+  lookaheadAgent, randomAgent,
+} = module.exports;
+
+// ---- config ----------------------------------------------------------------
+const W = 8, H = 12, CELL = 40;
+const COMBO = [
+  'gravity','applyVelocity','lineClear','playerInput','moveVertical','shoot',
+  'damageOnCollision','lockOnHitWall','lockOnCollisionFaller',
+  'destroyProjectileOnWall','pickupOnCollision','healOnPickup',
+  'pickupSpawner','hazardSpawner','movingHazard','hazardDamage',
+  'spawnNextFaller','enemySpawner','enemyMove','enemyContactDamage',
+  'scoreThresholdWin',
+];
+const MAX_TICKS = 300;
+
+// ---- canvas ----------------------------------------------------------------
+const canvas = document.getElementById('canvas');
+const gfx    = canvas.getContext('2d');
+canvas.width  = W * CELL;
+canvas.height = H * CELL;
+
+// ---- state -----------------------------------------------------------------
+let world, rules, running = false, timer = null;
+let prevScore = [0, 0];
+let logLines  = [];
+
+function buildWorld() {
+  world = makeWorld(W, H);
+  rules = buildRules(COMBO);
+  addEntity(world, {x:3, y:H-1, cells:[[0,0]], hp:5, tags:TAG.PLAYER, side:0});
+  addEntity(world, {x:3, y:0,   cells:[[0,0]], hp:5, tags:TAG.PLAYER, side:1});
+  addEntity(world, {x:4, y:H-2, cells:[[0,0]], tags:TAG.PICKUP});
+  addEntity(world, {x:2, y:3,   cells:[[0,0]], tags:TAG.PICKUP});
+  addEntity(world, {x:1, y:0,   cells:[[0,0]], tags:TAG.FALLER});
+  prevScore = [0, 0];
+  logLines  = [];
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('ov').style.display = 'none';
+}
+
+// ---- drawing ---------------------------------------------------------------
+function entityColor(id) {
+  const t = world.tags[id];
+  if (t & TAG.PLAYER)     return world.side[id] === 0 ? '#00d4aa' : '#ff4466';
+  if (t & TAG.PROJECTILE) return '#ffee44';
+  if (t & TAG.HAZARD)     return '#ff6622';
+  if (t & TAG.PICKUP)     return '#ffaa00';
+  if (t & TAG.ENEMY)      return '#aa44ff';
+  if (t & TAG.FALLER)     return '#5577ff';
+  return '#8899bb';
+}
+
+function draw() {
+  // background
+  gfx.fillStyle = '#0a0a1a';
+  gfx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // grid lines
+  gfx.strokeStyle = '#0f0f28';
+  gfx.lineWidth = 1;
+  for (let x = 0; x <= W; x++) {
+    gfx.beginPath(); gfx.moveTo(x*CELL, 0); gfx.lineTo(x*CELL, H*CELL); gfx.stroke();
+  }
+  for (let y = 0; y <= H; y++) {
+    gfx.beginPath(); gfx.moveTo(0, y*CELL); gfx.lineTo(W*CELL, y*CELL); gfx.stroke();
+  }
+
+  // entities
+  const pad = 3;
+  for (let id = 0; id < world.alive.length; id++) {
+    if (!world.alive[id]) continue;
+    gfx.fillStyle = entityColor(id);
+    for (const [cx, cy] of cellsOf(world, id)) {
+      if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+      gfx.fillRect(cx*CELL+pad, cy*CELL+pad, CELL-pad*2, CELL-pad*2);
+    }
+    // HP label on players
+    if ((world.tags[id] & TAG.PLAYER) && world.alive[id] && world.hp[id] > 0) {
+      gfx.fillStyle = 'rgba(255,255,255,0.6)';
+      gfx.font = 'bold 10px monospace';
+      gfx.textAlign = 'center';
+      gfx.fillText(
+        world.hp[id],
+        world.x[id]*CELL + CELL/2,
+        world.y[id]*CELL + CELL/2 + 4
+      );
+    }
+  }
+}
+
+// ---- HUD -------------------------------------------------------------------
+function pushLog(msg) {
+  logLines.unshift(msg);
+  if (logLines.length > 18) logLines.pop();
+  document.getElementById('log').innerHTML = logLines.map(m => `<div>${m}</div>`).join('');
+}
+
+function updateHUD() {
+  let hp0 = '—', hp1 = '—', alive = 0;
+  for (let id = 0; id < world.alive.length; id++) {
+    if (!world.alive[id]) continue;
+    alive++;
+    if ((world.tags[id] & TAG.PLAYER) && world.side[id] === 0) hp0 = world.hp[id];
+    if ((world.tags[id] & TAG.PLAYER) && world.side[id] === 1) hp1 = world.hp[id];
+  }
+  document.getElementById('s0').textContent   = world.score[0];
+  document.getElementById('s1').textContent   = world.score[1];
+  document.getElementById('tick').textContent = world.tick;
+  document.getElementById('hp0').textContent  = hp0;
+  document.getElementById('hp1').textContent  = hp1;
+  document.getElementById('ents').textContent = alive;
+
+  if (world.score[0] !== prevScore[0])
+    pushLog(`t${world.tick} P0 +${world.score[0]-prevScore[0]} → ${world.score[0]}`);
+  if (world.score[1] !== prevScore[1])
+    pushLog(`t${world.tick} P1 +${world.score[1]-prevScore[1]} → ${world.score[1]}`);
+  prevScore = world.score.slice();
+}
+
+function showResult() {
+  const ov = document.getElementById('ov');
+  const sc = `${world.score[0]} — ${world.score[1]}`;
+  if (world.over && world.winner === 0)
+    ov.innerHTML = `<b class="s0">Player 0 wins by score!</b><br><small>${sc}</small>`;
+  else if (world.over && world.winner === 1)
+    ov.innerHTML = `<b class="s1">Player 1 wins by score!</b><br><small>${sc}</small>`;
+  else {
+    let p0 = false, p1 = false;
+    for (let id = 0; id < world.alive.length; id++) {
+      if (!world.alive[id] || !(world.tags[id] & TAG.PLAYER)) continue;
+      if (world.side[id] === 0) p0 = true; else p1 = true;
+    }
+    if (!p0)      ov.innerHTML = `<b class="s1">Player 1 wins!</b><br><small>${sc}</small>`;
+    else if (!p1) ov.innerHTML = `<b class="s0">Player 0 wins!</b><br><small>${sc}</small>`;
+    else          ov.innerHTML = `Draw — tick limit<br><small>${sc}</small>`;
+  }
+  ov.style.display = 'block';
+}
+
+// ---- game loop -------------------------------------------------------------
+function agentFor(selId, side) {
+  const v = document.getElementById(selId).value;
+  return v === 'lookahead'
+    ? (w, r, s) => lookaheadAgent(w, r, s, 1)
+    : randomAgent;
+}
+
+function gameTick() {
+  const p0fn = agentFor('p0', 0);
+  const p1fn = agentFor('p1', 1);
+  const inputs = {};
+  for (let id = 0; id < world.alive.length; id++) {
+    if (!world.alive[id] || !(world.tags[id] & TAG.PLAYER)) continue;
+    inputs[id] = world.side[id] === 0
+      ? p0fn(world, rules, 0)
+      : p1fn(world, rules, 1);
+  }
+
+  step(world, rules, inputs);
+  draw();
+  updateHUD();
+
+  let p0 = false, p1 = false;
+  for (let id = 0; id < world.alive.length; id++) {
+    if (!world.alive[id] || !(world.tags[id] & TAG.PLAYER)) continue;
+    if (world.side[id] === 0) p0 = true; else p1 = true;
+  }
+
+  if (!p0 || !p1 || world.over || world.tick >= MAX_TICKS) {
+    stop();
+    showResult();
+  }
+}
+
+// ---- controls --------------------------------------------------------------
+function play() {
+  if (running) return;
+  running = true;
+  document.getElementById('btn-play').textContent = '⏸ Pause';
+  document.getElementById('btn-play').classList.add('active');
+  const ms = +document.getElementById('speed').value;
+  timer = setInterval(gameTick, ms);
+}
+
+function stop() {
+  running = false;
+  clearInterval(timer);
+  timer = null;
+  document.getElementById('btn-play').textContent = '▶ Play';
+  document.getElementById('btn-play').classList.remove('active');
+}
+
+function restart() {
+  stop();
+  buildWorld();
+  draw();
+  updateHUD();
+}
+
+document.getElementById('btn-play').onclick    = () => running ? stop() : play();
+document.getElementById('btn-restart').onclick  = restart;
+document.getElementById('speed').onchange       = () => { if (running) { stop(); play(); } };
+
+// ---- init ------------------------------------------------------------------
+buildWorld();
+draw();
+updateHUD();
+</script>
+</body>
+</html>
