@@ -1,119 +1,181 @@
-# The Game Factory — ECS Prototype
+# Game Factory ECS
 
-## What this is
+An experimental engine for generating tiny 2D games by recombining small rule
+atoms.
 
-A prototype "discrete physics" engine for generating, simulating, and judging
-2D games automatically. The long-term goal: a library of small atomic rules
-("gravity", "line clear", "shoot", "pickup"...) that can be recombined into
-new game configs, self-played by a generic AI agent, and scored for whether
-the combination produced something *fair, decisive, and skill-rewarding* —
-i.e. an actual game, not noise.
+The goal is not to hand-design one game. The goal is to build a system that can:
 
-This repo is the **first working slice**: an Entity-Component-System (ECS)
-core in plain JavaScript (no build step, runs in Node), 9 atoms, a
-clone-based lookahead agent, and a test harness. It is NOT yet a generator —
-the atom *combination* is currently hand-picked. The generator/recombination
-layer and the Judge's automated verdicts are the next layer to build.
+1. combine simple mechanics such as gravity, shooting, pickups, hazards, enemies,
+   respawn, and line clearing;
+2. simulate the result automatically;
+3. let simple agents play it;
+4. judge whether the result looks like a coherent game or just noise.
 
-## Project history (why it looks like this)
+At the moment, this project is a working prototype. It can simulate rule combos,
+run AI-vs-AI matches, visualize them in a browser, and score combinations with a
+first-pass judge. It does not yet reliably generate good games.
 
-The project went through several pivots, each one a deliberate simplification
-or generalization. Understanding this history will save you from re-deriving
-decisions that were already made for a reason:
+## Current Verdict
 
-1. **Started as a board-game factory** (chess-like games on small grids,
-   single-cell pieces, "capture the royal" win condition). Worked well,
-   produced a playable archive of 100 generated games + an AlphaZero-style
-   trainer. See `docs/00-board-game-era.md` for what exists from that era
-   and how it relates to this one (some of it may still be useful).
+The engine is useful. The latest generated game should probably be discarded.
 
-2. **User asked: no predefined win condition.** Goal became generated DNA
-   too (annihilate / reach / collect / line). Still single-cell pieces on
-   a grid.
+The current sample combo mixes too many unrelated ideas:
 
-3. **User asked: one-touch mechanic** ("touch a piece, it moves on its own").
-   Built "Korin Drift" — a single polished game with rotating-arrow pieces
-   that slide until they hit something. This was the last *board game*.
+- Tetris-like falling blocks and line clears
+- arena shooting
+- pickups and healing
+- drifting hazards
+- chasing enemies
+- respawning players
+- score-threshold wins
 
-4. **User asked: remove the grid/single-cell assumption entirely.** Vision:
-   400x254 continuous-ish space, multi-cell shapes (Tetris-style), ~1000
-   rules mined from gaming history (Tetris to PUBG), recombined and
-   self-played to find emergent patterns.
+The simulation is active and decisive, but the rules do not cohere into a clear
+player experience. A human can watch it and ask, reasonably, "what game am I
+actually playing?"
 
-5. **Compromise reached** (this repo): keep a grid (small, e.g. 8x12) for
-   tractability, but generalize the *primitive* from "piece on a square" to
-   "entity = multi-cell shape + components", per the ECS architecture
-   document the user provided (`docs/03-original-ecs-spec.md`). Start with
-   ~9 atoms instead of 1000, hand-combined instead of auto-recombined.
+That is the central lesson of the current prototype: the judge can detect
+activity, decisiveness, and basic skill variance, but it does not yet understand
+design coherence.
 
-## Current status (read this before doing anything else)
+## What Works
 
-**Working:**
-- ECS core (`src/engine.js`): flat-array components, entity recycling,
-  grid <-> entity sync, `cloneWorld()` for AI lookahead (~1ms/call).
-- 9 atoms covering movement, gravity, collision, shooting, damage, pickups,
-  and "locking" (a faller stops being affected by gravity once it lands).
-- Tick pipeline: input -> per-entity tick atoms -> event processing
-  (bounded rounds) -> global tick atoms -> more event processing.
-- Generic `lookaheadAgent`: clones the world, tries each of 5 inputs for N
-  ticks, picks the one with the best `evaluate()` score. Goal-agnostic
-  (reads `score[]` and `hp[]`/alive-count, not anything game-specific).
+- `src/engine.js` contains the ECS-style simulation core.
+- Worlds are small grids with entities made of one or more cells.
+- Components are stored in flat arrays indexed by entity id.
+- Atoms define mechanics such as movement, gravity, shooting, collision damage,
+  pickups, hazards, enemies, respawn, and line clearing.
+- `cloneWorld()` supports cheap lookahead for simple AI agents.
+- `tests/demo.js` runs a fixed sample match in Node.
+- `tests/judge.js` mutates rule combinations and scores them.
+- `tests/viewer.html` displays AI-vs-AI matches in a browser.
+- `tests/lineclear_test.js` catches regressions around line clearing and entity
+  stability.
 
-**Broken / not yet working — see `docs/02-known-issues.md` for full detail:**
-- `lineClear` atom causes an entity-count explosion when combined with the
-  faller-locking atoms (61 -> 960 entities in 20 ticks). Currently EXCLUDED
-  from the demo combo. Needs redesign before re-adding.
-- The current demo combo (`tests/demo.js`) is a "dud" — random play produces
-  zero scoring events in 150 ticks. This is a *design* gap (players can only
-  go left/right/rotate/shoot; pickups are placed somewhere they can't reach)
-  not an engine bug. Good first task: add vertical movement or reposition
-  pickups, then re-check.
+## What Does Not Work Yet
 
-**Not started:**
-- The Generator/recombination layer (picking subsets of atoms automatically).
-- The Judge's automated verdict (currently the metrics from the original
-  spec — decisiveness, rule density, skill variance — are NOT implemented
-  as code, only described in docs).
-- Any rendering (Raylib or otherwise). Everything is headless/console so far.
-- The "1000 rules from gaming history" library. Currently 9 hand-written atoms.
+- The generated games are not necessarily understandable or fun.
+- The judge can mark a messy mechanics pile as `KEEPER` if it is decisive and
+  produces enough events.
+- There is no human-play mode yet; the viewer is currently a simulation viewer.
+- The rule library is still tiny compared to the original long-term idea.
+- The docs under `docs/` include older planning/history notes and may lag behind
+  the current prototype.
 
-## Directory layout
+## How To Run
 
-```
-gamefactory-ecs/
-  README.md                 <- you are here
-  src/
-    engine.js                <- the ECS core + 9 atoms + lookahead agent (pure, no I/O)
-  tests/
-    demo.js                  <- node harness: builds a world, runs matches, prints stats
-  docs/
-    00-board-game-era.md      <- what exists from the previous (board game) phase
-    01-architecture.md        <- how the ECS works: components, atoms, tick loop
-    02-known-issues.md         <- the lineClear bug and the "dud combo" issue, in detail
-    03-original-ecs-spec.md   <- the C++ architecture doc the user provided (source of truth
-                                  for the *intended* design; this JS prototype is a faithful
-                                  but simplified translation of it)
-    04-next-steps.md          <- concrete, ordered suggestions for what to build next
-```
+Requires Node.js 18 or newer. There are no npm dependencies.
 
-## Running it
-
-No dependencies, no build step.
+Run the console demo:
 
 ```bash
-node tests/demo.js
+npm run demo
 ```
 
-Expected output (current state): random-vs-random ends at the tick limit
-with score [0,0] and no events fired (the "dud combo" issue above).
-Lookahead-vs-random also currently wins 0/6 because there's nothing to
-score. This is the known starting point — see `docs/04-next-steps.md`
-for how to get a non-dud combo running first.
+Run the browser viewer:
 
-## A note on scale
+```bash
+npm run viewer
+```
 
-The user's eventual vision is a 400x254 world with ~1000 rules. This
-prototype runs on an 8x12 grid with 9 rules. That gap is intentional — see
-`docs/04-next-steps.md` for the suggested scaling path (bigger grids and
-more atoms are mostly "just add more", but the *generator* and *judge* need
-to exist before scale is useful, otherwise you just get more noise faster).
+Then open:
+
+```text
+http://localhost:3000/tests/viewer.html
+```
+
+You can also use Python's built-in server:
+
+```bash
+python -m http.server 3000
+```
+
+Then open the same URL above.
+
+Run the judge/search:
+
+```bash
+node --max-old-space-size=4096 tests/judge.js
+```
+
+Run the line-clear regression test:
+
+```bash
+node tests/lineclear_test.js
+```
+
+## The Current Sample Game
+
+The viewer currently shows an AI-vs-AI simulation on an 8 by 12 grid.
+
+- Teal starts at the bottom.
+- Red starts at the top.
+- Blue fallers drop from above and can form clearable rows.
+- Yellow projectiles are fired by players.
+- Gold pickups heal.
+- Orange hazards damage nearby players.
+- Purple enemies chase players.
+- Dead players can respawn.
+- The first side to reach the score threshold wins.
+
+By default this is not human-controlled. P0 is usually the lookahead agent, and
+P1 is random. If P0 wins, that means the AI on the teal side won.
+
+## The Judge
+
+`tests/judge.js` currently scores combinations using simple metrics:
+
+- decisiveness: does the match end?
+- rule density: do events happen?
+- skill variance: does lookahead beat random?
+- stability: do entity counts and grid invariants remain sane?
+
+These metrics are useful but incomplete. They can say "this simulation is alive"
+but not "this is a good game."
+
+The next important judge metric should be coherence. For example, a combo should
+be penalized when it mixes too many independent systems without a dominant core
+loop. A generated game should probably be one of these, not all at once:
+
+- falling-block puzzle
+- arena shooter
+- pickup race
+- survival chase
+
+## Project Layout
+
+```text
+gamefactory-ecs/
+  src/
+    engine.js              ECS core, atoms, agents, simulation step
+  tests/
+    demo.js                Console demo
+    judge.js               Combo mutation and first-pass judge
+    viewer.html            Browser simulation viewer
+    viewer_server.js       Tiny local HTTP server for the viewer
+    lineclear_test.js      Regression test for line clearing
+    assert.js              World invariant checks
+  docs/
+    00-board-game-era.md    Notes from the older board-game generator phase
+    01-architecture.md      ECS architecture notes
+    02-known-issues.md      Older issue notes; may be stale
+    03-original-ecs-spec.md Original architecture/spec reference
+    04-next-steps.md        Older next-step planning
+```
+
+## Suggested Next Steps
+
+1. Add human controls to the viewer.
+2. Add a plain-English rules panel for the active combo.
+3. Add a coherence score to the judge.
+4. Restrict generated combos to one dominant genre loop at a time.
+5. Promote stable, understandable combos into named presets.
+6. Update or archive stale docs once the current direction is clear.
+
+## Philosophy
+
+This project is not failing because it generated a bad game. It would fail only
+if it could not learn to reject bad games.
+
+The current prototype proves that the system can create simulations with moving
+parts, scoring, agents, and endings. The next step is teaching it taste: not just
+"did something happen?" but "does this deserve to exist as a game?"

@@ -108,6 +108,45 @@ select {
   border-radius: 3px;
 }
 label { color: #8899bb; }
+
+/* touch controller */
+#controller {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: #10102a;
+  border: 1px solid #1e1e3e;
+  border-radius: 6px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#ctrl-label { font-size: 0.65em; letter-spacing: 0.12em; color: #445588; text-transform: uppercase; }
+#ctrl-inner { display: flex; gap: 32px; align-items: center; }
+.dpad {
+  display: grid;
+  grid-template-areas: '. u .' 'l c r' '. d .';
+  grid-template-columns: repeat(3, 50px);
+  grid-template-rows: repeat(3, 50px);
+  gap: 4px;
+}
+.cbt {
+  background: #181830; color: #c8d0ff;
+  border: 1px solid #333366;
+  border-radius: 8px; font-size: 1.2em;
+  cursor: pointer; font-family: monospace;
+  width: 50px; height: 50px;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.05s, border-color 0.05s;
+}
+.cbt.cbt-active { background: #1a2d6a; border-color: #6688cc; }
+#cbt-c { font-size: 0.7em; color: #333355; }
+#cbt-rot { background: #1a2a1a; border-color: #336633; font-size: 0.75em; }
+#cbt-fire { background: #2a1515; border-color: #663333; width: 64px; height: 64px; font-size: 0.9em; font-weight: bold; }
+.action-pad { display: flex; flex-direction: column; gap: 8px; align-items: center; }
 </style>
 </head>
 <body>
@@ -122,9 +161,11 @@ label { color: #8899bb; }
     </div>
     <div id="controls" style="margin-top:10px;">
       <button id="btn-play">&#9654; Play</button>
+      <button id="btn-step">Step</button>
       <button id="btn-restart">&#8635; Restart</button>
       <label>Speed
         <select id="speed">
+          <option value="2000">2 sec</option>
           <option value="600">Slow</option>
           <option value="160" selected>Normal</option>
           <option value="40">Fast</option>
@@ -134,12 +175,14 @@ label { color: #8899bb; }
         <select id="p0">
           <option value="lookahead">Lookahead</option>
           <option value="random">Random</option>
+          <option value="human">Human</option>
         </select>
       </label>
       <label>P1
         <select id="p1">
           <option value="random" selected>Random</option>
           <option value="lookahead">Lookahead</option>
+          <option value="human">Human</option>
         </select>
       </label>
     </div>
@@ -178,25 +221,61 @@ label { color: #8899bb; }
   </div>
 </div>
 
+<!-- Touch controller -->
+<div id="controller">
+  <div id="ctrl-label">Human Controls</div>
+  <div id="ctrl-inner">
+    <div class="dpad">
+      <button class="cbt" id="cbt-u"  style="grid-area:u" data-inp="up">▲</button>
+      <button class="cbt" id="cbt-l"  style="grid-area:l" data-inp="left">◀</button>
+      <button class="cbt" id="cbt-c"  style="grid-area:c" data-inp="wait">·</button>
+      <button class="cbt" id="cbt-r"  style="grid-area:r" data-inp="right">▶</button>
+      <button class="cbt" id="cbt-d"  style="grid-area:d" data-inp="down">▼</button>
+    </div>
+    <div class="action-pad">
+      <button class="cbt" id="cbt-rot"  data-inp="rotate">ROT</button>
+      <button class="cbt" id="cbt-fire" data-inp="shoot">FIRE</button>
+    </div>
+  </div>
+</div>
+
 <!-- Browser shim: let engine.js populate module.exports -->
-<script> window.module = { exports: {} }; window.require = () => ({}); </script>
+<script>
+function showError(err) {
+  if (typeof stop === 'function') stop();
+  const ov = document.getElementById('ov');
+  const msg = err && err.stack ? err.stack : String(err);
+  ov.innerHTML = `<b style="color:#ff6688">Viewer error</b><br><small>${msg.replace(/[<&>]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</small>`;
+  ov.style.display = 'block';
+  console.error(err);
+}
+window.addEventListener('error', ev => showError(ev.error || ev.message));
+window.addEventListener('unhandledrejection', ev => showError(ev.reason));
+window.module = { exports: {} };
+window.require = () => ({});
+</script>
 <script src="../src/engine.js"></script>
 <script>
 'use strict';
+{
+const engine = window.module && window.module.exports;
+if (!engine || typeof engine.makeWorld !== 'function') {
+  throw new Error('Engine did not load. Open this page through the local server: npm run viewer');
+}
 const {
   TAG, makeWorld, addEntity, cellsOf, buildRules, step,
   lookaheadAgent, randomAgent,
-} = module.exports;
+} = engine;
 
 // ---- config ----------------------------------------------------------------
 const W = 8, H = 12, CELL = 40;
 const COMBO = [
   'gravity','applyVelocity','lineClear','playerInput','moveVertical','shoot',
   'damageOnCollision','lockOnHitWall','lockOnCollisionFaller',
-  'destroyProjectileOnWall','pickupOnCollision','healOnPickup',
-  'pickupSpawner','hazardSpawner','movingHazard','hazardDamage',
+  'pickupOnCollision','healOnPickup','pickupSpawner',
+  'hazardSpawner','movingHazard','hazardDamage',
   'spawnNextFaller','enemySpawner','enemyMove','enemyContactDamage',
-  'scoreThresholdWin',
+  'respawnPlayer','scoreThresholdWin',
 ];
 const MAX_TICKS = 300;
 
@@ -210,6 +289,7 @@ canvas.height = H * CELL;
 let world, rules, running = false, timer = null;
 let prevScore = [0, 0];
 let logLines  = [];
+let humanInput = 'wait';
 
 function buildWorld() {
   world = makeWorld(W, H);
@@ -327,12 +407,13 @@ function showResult() {
 // ---- game loop -------------------------------------------------------------
 function agentFor(selId, side) {
   const v = document.getElementById(selId).value;
-  return v === 'lookahead'
-    ? (w, r, s) => lookaheadAgent(w, r, s, 1)
-    : randomAgent;
+  if (v === 'lookahead') return (w, r, s) => lookaheadAgent(w, r, s, 1);
+  if (v === 'human')     return () => humanInput;
+  return randomAgent;
 }
 
 function gameTick() {
+  try {
   const p0fn = agentFor('p0', 0);
   const p1fn = agentFor('p1', 1);
   const inputs = {};
@@ -357,6 +438,11 @@ function gameTick() {
     stop();
     showResult();
   }
+  humanInput = 'wait';
+  document.querySelectorAll('.cbt').forEach(b => b.classList.remove('cbt-active'));
+  } catch (err) {
+    showError(err);
+  }
 }
 
 // ---- controls --------------------------------------------------------------
@@ -366,6 +452,8 @@ function play() {
   document.getElementById('btn-play').textContent = '⏸ Pause';
   document.getElementById('btn-play').classList.add('active');
   const ms = +document.getElementById('speed').value;
+  gameTick();
+  if (!running) return;
   timer = setInterval(gameTick, ms);
 }
 
@@ -385,13 +473,42 @@ function restart() {
 }
 
 document.getElementById('btn-play').onclick    = () => running ? stop() : play();
+document.getElementById('btn-step').onclick    = gameTick;
 document.getElementById('btn-restart').onclick  = restart;
-document.getElementById('speed').onchange       = () => { if (running) { stop(); play(); } };
+document.getElementById('speed').onchange      = () => { if (running) { stop(); play(); } };
+document.getElementById('p0').onchange         = updateController;
+document.getElementById('p1').onchange         = updateController;
+
+// ---- controller ------------------------------------------------------------
+function updateController() {
+  const p0v = document.getElementById('p0').value;
+  const p1v = document.getElementById('p1').value;
+  const ctrl = document.getElementById('controller');
+  const lbl  = document.getElementById('ctrl-label');
+  const anyHuman = p0v === 'human' || p1v === 'human';
+  ctrl.style.display = anyHuman ? 'flex' : 'none';
+  if (p0v === 'human' && p1v === 'human') lbl.textContent = 'Human Controls (both sides)';
+  else if (p0v === 'human')               lbl.textContent = 'P0 Controls  ·  teal  ·  bottom';
+  else                                    lbl.textContent = 'P1 Controls  ·  red   ·  top';
+}
+
+document.querySelectorAll('.cbt').forEach(btn => {
+  const press = () => {
+    humanInput = btn.dataset.inp;
+    document.querySelectorAll('.cbt').forEach(b => b.classList.remove('cbt-active'));
+    if (humanInput !== 'wait') btn.classList.add('cbt-active');
+  };
+  btn.addEventListener('mousedown',  press);
+  btn.addEventListener('touchstart', e => { e.preventDefault(); press(); }, {passive: false});
+  btn.addEventListener('touchend',   e => e.preventDefault(), {passive: false});
+});
 
 // ---- init ------------------------------------------------------------------
 buildWorld();
 draw();
 updateHUD();
+updateController();
+}
 </script>
 </body>
 </html>

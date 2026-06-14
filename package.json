@@ -5,7 +5,8 @@
   "main": "src/engine.js",
   "type": "commonjs",
   "scripts": {
-    "demo": "node tests/demo.js"
+    "demo": "node tests/demo.js",
+    "viewer": "node tests/viewer_server.js"
   },
   "engines": { "node": ">=18" }
 }
